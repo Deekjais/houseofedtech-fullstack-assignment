@@ -1,0 +1,106 @@
+generator client {
+  provider = "prisma-client"
+  output   = "../generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum DocumentRole {
+  OWNER
+  EDITOR
+  VIEWER
+}
+
+enum OperationType {
+  INSERT
+  DELETE
+  REPLACE
+}
+
+model User {
+  id           String           @id @default(cuid())
+  name         String?
+  email        String           @unique
+  passwordHash String
+  createdAt    DateTime         @default(now())
+  updatedAt    DateTime         @updatedAt
+
+  ownedDocuments Document[]       @relation("DocumentOwner")
+  memberships   DocumentMember[]
+  operations    DocumentOperation[]
+  versions      DocumentVersion[]
+}
+
+model Document {
+  id             String              @id @default(cuid())
+  title          String              @default("Untitled Document")
+  content        Json
+  currentVersion Int                 @default(0)
+  ownerId        String
+  createdAt      DateTime            @default(now())
+  updatedAt      DateTime            @updatedAt
+
+  owner      User                @relation("DocumentOwner", fields: [ownerId], references: [id], onDelete: Cascade)
+  members    DocumentMember[]
+  operations DocumentOperation[]
+  versions   DocumentVersion[]
+
+  @@index([ownerId])
+  @@index([updatedAt])
+}
+
+model DocumentMember {
+  id         String       @id @default(cuid())
+  documentId String
+  userId     String
+  role       DocumentRole
+  createdAt  DateTime     @default(now())
+  updatedAt  DateTime     @updatedAt
+
+  document Document @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  user     User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([documentId, userId])
+  @@index([userId])
+  @@index([documentId, role])
+}
+
+model DocumentOperation {
+  id            String        @id @default(cuid())
+  operationId   String        @unique
+  documentId    String
+  userId        String
+  clientId      String
+  type          OperationType
+  payload       Json
+  logicalClock  BigInt
+  baseVersion   Int
+  createdAt     DateTime      @default(now())
+
+  document Document @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  user     User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([documentId, logicalClock])
+  @@index([documentId, createdAt])
+  @@index([userId])
+}
+
+model DocumentVersion {
+  id              String   @id @default(cuid())
+  documentId      String
+  createdById     String
+  versionNumber   Int
+  title           String
+  content         Json
+  sourceVersionId String?
+  createdAt       DateTime @default(now())
+
+  document  Document @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  createdBy User     @relation(fields: [createdById], references: [id], onDelete: Cascade)
+
+  @@unique([documentId, versionNumber])
+  @@index([documentId, createdAt])
+  @@index([createdById])
+}
